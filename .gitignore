@@ -1,0 +1,64 @@
+# ---------------------------
+# PYTHON / JUPYTER
+# ---------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+
+# ---------------------------
+# VIRTUAL ENVIRONMENTS
+# ---------------------------
+.venv/
+idsenv310/
+
+# ---------------------------
+# DATASETS (YOUR SCREENSHOT: data/)
+# ---------------------------
+data/
+# in case you ever move files out of data
+*CICIDS*.csv
+*NSLKDD*.csv
+*UNSW*.csv
+*WSN-DS*.csv
+data/*.txt
+
+# ---------------------------
+# MODEL CHECKPOINTS / TRAINING OUTPUTS
+# ---------------------------
+app_models/
+results/
+checkpoints/
+models/
+runs/
+outputs/
+*.h5
+*.hdf5
+*.ckpt
+*.pt
+*.pth
+*.pkl
+
+# ---------------------------
+# LOGS / TEMP
+# ---------------------------
+*.log
+*.tmp
+*.temp
+nohup.out
+
+# ---------------------------
+# IDE / EDITOR
+# ---------------------------
+.vscode/
+.idea/
+
+# ---------------------------
+# OS JUNK
+# ---------------------------
+.DS_Store
+Thumbs.db
