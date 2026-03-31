@@ -243,14 +243,16 @@ def _try_keras_load(path):
         except Exception:
             return None
 
-@tf.keras.utils.register_keras_serializable(package="custom")
-class LSTMCompat(tf.keras.layers.LSTM):
-    @classmethod
-    def from_config(cls, config):
-        # silently drop keys that older/newer tf.keras doesn't accept
-        config.pop("time_major", None)
-        config.pop("time_major", None)  # safe no-op if not present
-        return super().from_config(config)
+from tensorflow.keras.utils import get_custom_objects
+
+if "custom>LSTMCompat" not in get_custom_objects():
+
+    @tf.keras.utils.register_keras_serializable(package="custom")
+    class LSTMCompat(tf.keras.layers.LSTM):
+        @classmethod
+        def from_config(cls, config):
+            config.pop("time_major", None)
+            return super().from_config(config)
 
 
 # ----------------- REPLACED model_predict_proba -----------------
