@@ -88,15 +88,17 @@ def load_and_preprocess(csv_path, label_col_hint=None, test_size=0.2, sample_fra
         X_df = X_df.drop(columns=const_cols)
 
     feature_names = X_df.columns.tolist()
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_df.values)
 
     le = LabelEncoder()
     y = le.fit_transform(y_raw)
-
+    
     X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y, test_size=test_size, random_state=SEED, stratify=y
+        X_df.values, y, test_size=test_size, random_state=SEED, stratify=y
     )
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
     return X_train, X_test, y_train, y_test, scaler, le, feature_names
 
@@ -132,32 +134,37 @@ def align_and_merge(csv_paths, label_col_hint=None, test_size=0.2, sample_frac=N
     X_list = []
     y_list = []
     for df in dfs:
-        # ensure all common_features present; if missing, fill with zeros
+        # ensure all common_features present; if missing fill with 0; 0 just represents empty, does not have value
+        # it is just a placeholder for a column that is not present in that particular dataset
         missing = [c for c in common_features if c not in df.columns]
         df_local = df.copy()
         if missing:
             for m in missing:
                 df_local[m] = 0
         # keep only the common feature order
-        df_sub = df_local[common_features + ["Attack Type"]].copy()
+        df_sub = df_local[common_features + ["Attack Type"]].copy() 
         # encode object features if any
-        for c in df_sub.select_dtypes(include=['object']).columns:
+        for c in df_sub.select_dtypes(include=['object']).columns:  #searcg for columns whose data type is object/str
             if c != "Attack Type":
                 df_sub[c] = LabelEncoder().fit_transform(df_sub[c].astype(str))
         X_list.append(df_sub[common_features].values)
         y_list.append(df_sub["Attack Type"].astype(str).values)
 
-    X = np.vstack(X_list)
+    X = np.vstack(X_list)  #combine all datasets vertically, in stack
     y_raw = np.concatenate(y_list)
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
 
     le = LabelEncoder()
     y = le.fit_transform(y_raw)
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=test_size, random_state=SEED, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=SEED, stratify=y)
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
     return X_train, X_test, y_train, y_test, scaler, le, common_features
+
+
 
 # NSL-KDD loader wrapper (calls user-provided prepare_nsl_kdd module)
 def load_nslkdd_preprocessed(train_path, test_path):

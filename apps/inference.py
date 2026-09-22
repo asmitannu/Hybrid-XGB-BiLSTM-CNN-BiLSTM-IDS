@@ -1,44 +1,30 @@
-# src/streamlit_app.py
-# Drop-in replacement. Save and restart streamlit.
+# apps/inference.py
+# Inference functions extracted verbatim from streamlit_app.py.
+# This module contains NO Streamlit dependencies.
+# All ML logic is identical to the original Streamlit implementation.
 
-import streamlit as st
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import joblib
 import tensorflow as tf
-import time
-import os
 import importlib
-import traceback
-from pathlib import Path
 
-st.set_page_config(page_title="Hybrid Intrusion Detection System", layout="wide")
+# ── Custom Keras layer needed for loading certain models ──────────────
+from tensorflow.keras.utils import get_custom_objects
 
-ROOT = Path.cwd()
-APP_MODELS = ROOT / "app_models"
+if "custom>LSTMCompat" not in get_custom_objects():
 
-# simple styling
-st.markdown(
-    """
-    <style>
-    :root { color-scheme: dark; }
-    body { background-color: #0b0b0b; color: #fff; }
-    h1, h2, h3, label { color: #ffdddd; }
-    .stButton>button { background-color: #a40d0d; color: white; border: none; padding: 6px 10px; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+    @tf.keras.utils.register_keras_serializable(package="custom")
+    class LSTMCompat(tf.keras.layers.LSTM):
+        @classmethod
+        def from_config(cls, config):
+            config.pop("time_major", None)
+            return super().from_config(config)
 
-st.title("Hybrid CNN-XGB BILSTM IDS")
-st.write("Upload a CSV. App will auto-select a matching model and predict.")
 
-uploaded = st.file_uploader("Upload CSV (raw features)", type=["csv"])
-threshold = st.slider("Binary attack threshold (p_attack >= threshold)", 0.01, 0.99, 0.5, 0.01)
-show_match_details = st.checkbox("Show model match details", value=True)
+# ── Model discovery ───────────────────────────────────────────────────
 
-@st.cache_data(ttl=300)
 def discover_app_models(models_dir: Path):
     """
     Discover model variant folders under app_models/.
@@ -86,7 +72,8 @@ def discover_app_models(models_dir: Path):
                             out.append(make_meta(sub2))
     return out
 
-models_list = discover_app_models(APP_MODELS)
+
+# ── Model matching ────────────────────────────────────────────────────
 
 def score_model_match(meta, df: pd.DataFrame):
     # 0..1 score of match quality
@@ -111,6 +98,7 @@ def score_model_match(meta, df: pd.DataFrame):
             pass
     return 0.0
 
+
 def pick_best_model(df: pd.DataFrame, models_meta):
     scored = []
     for m in models_meta:
@@ -120,6 +108,9 @@ def pick_best_model(df: pd.DataFrame, models_meta):
         return None, 0.0
     scored = sorted(scored, key=lambda x: (x[0], x[1]["mtime"]), reverse=True)
     return scored[0][1], float(scored[0][0])
+
+
+# ── Artifact loading ─────────────────────────────────────────────────
 
 def load_artifacts(meta):
     out = {}
@@ -131,6 +122,9 @@ def load_artifacts(meta):
     except Exception:
         out["feature_meta"] = None
     return out
+
+
+# ── Input preparation ────────────────────────────────────────────────
 
 def safe_prepare_input(df, scaler, feature_meta):
     """
@@ -185,77 +179,9 @@ def safe_prepare_input(df, scaler, feature_meta):
         X_scaled = X_raw
     return X_scaled, msgs
 
-# Keep existing tf/keras fallback loaders available
-def _try_tf_load_with_custom(path):
-    """Attempt to load Keras model using tf.keras with a helpful custom_objects map."""
-    # map common layer names to tf.keras implementations
-    import tensorflow as tf
-    custom = {
-        "LSTM": tf.keras.layers.LSTM,
-        "GRU": tf.keras.layers.GRU,
-        "Bidirectional": tf.keras.layers.Bidirectional,
-        "TimeDistributed": tf.keras.layers.TimeDistributed,
-        "Masking": tf.keras.layers.Masking,
-        "LayerNormalization": tf.keras.layers.LayerNormalization,
-        "Dropout": tf.keras.layers.Dropout,
-        "Dense": tf.keras.layers.Dense,
-        "Conv1D": tf.keras.layers.Conv1D,
-        "Conv2D": tf.keras.layers.Conv2D,
-        "Flatten": tf.keras.layers.Flatten,
-        "Embedding": tf.keras.layers.Embedding,
-        # add more if you used custom layers
-    }
-    # try normal load first (works in most cases)
-    try:
-        model = tf.keras.models.load_model(str(path))
-        return model
-    except Exception as e:
-        # try with custom_objects
-        try:
-            model = tf.keras.models.load_model(str(path), custom_objects=custom, compile=False)
-            return model
-        except Exception:
-            # bubble up last exception for debugging
-            raise
 
-def _try_keras_load(path):
-    """If standalone keras is installed, try loading with it (some models saved with keras need this)."""
-    try:
-        keras = importlib.import_module("keras")
-    except Exception:
-        return None
-    try:
-        model = keras.models.load_model(str(path), compile=False)
-        return model
-    except Exception:
-        # try with custom_objects mapping to keras.layers
-        try:
-            custom = {
-                "LSTM": keras.layers.LSTM,
-                "GRU": keras.layers.GRU,
-                "Bidirectional": keras.layers.Bidirectional,
-                "TimeDistributed": keras.layers.TimeDistributed,
-                "Masking": keras.layers.Masking,
-                "LayerNormalization": keras.layers.LayerNormalization,
-            }
-            model = keras.models.load_model(str(path), custom_objects=custom, compile=False)
-            return model
-        except Exception:
-            return None
+# ── Model prediction ─────────────────────────────────────────────────
 
-from tensorflow.keras.utils import get_custom_objects
-
-if "custom>LSTMCompat" not in get_custom_objects():
-
-    @tf.keras.utils.register_keras_serializable(package="custom")
-    class LSTMCompat(tf.keras.layers.LSTM):
-        @classmethod
-        def from_config(cls, config):
-            config.pop("time_major", None)
-            return super().from_config(config)
-
-
-# ----------------- REPLACED model_predict_proba -----------------
 def model_predict_proba(model_file, X):
     """
     Robust model loader/predictor.
@@ -267,6 +193,8 @@ def model_predict_proba(model_file, X):
     Returns: probs (n_samples, n_classes) as numpy array
     """
     model_path = Path(model_file)
+    print(f"[DEBUG] model_file type: {type(model_file)}, value: {model_file}")
+    print(f"[DEBUG] model_path type: {type(model_path)}, suffix: {model_path.suffix}")
 
     # 1) SavedModel directory
     if model_path.is_dir():
@@ -349,7 +277,6 @@ def model_predict_proba(model_file, X):
                 }
 
                 model = tf.keras.models.load_model(str(model_path), compile=False, custom_objects=custom)
-                # model = tf.keras.models.load_model(str(model_path), compile=False)
             except Exception as e2:
                 raise RuntimeError(f"Failed to load Keras model: {e2}")
         preds = model.predict(X)
@@ -383,136 +310,26 @@ def model_predict_proba(model_file, X):
         return probs
 
     raise RuntimeError("Loaded model has no predict_proba or predict method.")
-# ----------------- END replaced function -----------------
 
-# UI
-if uploaded is None:
-    st.info("Upload a CSV file to run inference against models in app_models/.")
-    if not models_list:
-        st.warning("No model folders found under app_models/. Place your model variant folders (one per variant) there.")
-else:
-    # read uploaded CSV
+
+# ── Post-processing helpers ──────────────────────────────────────────
+
+def determine_class_labels(le):
+    """Get class label names from a fitted LabelEncoder, or return None."""
     try:
-        df = pd.read_csv(uploaded)
-    except Exception as e:
-        st.error("Failed to read CSV: " + str(e))
-        st.stop()
-
-    st.write(f"Uploaded {len(df)} rows, {df.shape[1]} columns. Preview:")
-    st.dataframe(df.head())
-
-    if not models_list:
-        st.error("No model folders found in app_models/.")
-        st.stop()
-
-    with st.spinner("Matching uploaded CSV to available model variants..."):
-        best_meta, score = pick_best_model(df, models_list)
-        time.sleep(0.15)
-
-    if best_meta is None or score == 0.0:
-        st.error("No matching model found. Make sure each model folder contains scaler.pkl and feature_meta.pkl (or scaler with n_features_in_).")
-        # show available models and why they didn't match (debug)
-        if show_match_details:
-            st.write("Available model folders and quick info:")
-            for m in models_list:
-                st.write({ "name": m["name"], "has_model_file": bool(m["model_file"]), "has_scaler": bool(m["scaler"]), "has_feature_meta": bool(m["feature_meta"]) })
-        st.stop()
-
-    st.markdown(f"**Auto-selected model folder:** `{best_meta['name']}`  — match score: **{score:.3f}**")
-    if show_match_details:
-        st.write("Artifacts present:", {k: bool(best_meta.get(k)) for k in ["model_file","scaler","label_enc","feature_meta"]})
-
-    artifacts = load_artifacts(best_meta)
-    if artifacts["scaler"] is None or artifacts["model_file"] is None:
-        st.error("Selected folder missing required artifacts (scaler or model file).")
-        st.stop()
-
-    # prepare input safely
-    try:
-        X_scaled, prep_msgs = safe_prepare_input(df, artifacts["scaler"], artifacts["feature_meta"])
-    except Exception as e:
-        st.error("Failed to prepare input: " + str(e))
-        st.stop()
-
-    for m in prep_msgs:
-        st.info(m)
-
-    # if feature selection indices exist, apply them AFTER scaling
-    if artifacts["feature_meta"] and isinstance(artifacts["feature_meta"], dict) and artifacts["feature_meta"].get("selected_indices"):
-        idx = np.array(artifacts["feature_meta"]["selected_indices"], dtype=int)
-        try:
-            X_in = X_scaled[:, idx]
-        except Exception as e:
-            st.error("Failed to apply selected_indices: " + str(e))
-            st.stop()
-    else:
-        X_in = X_scaled
-
-    # predict
-    print(artifacts)
-    print(artifacts["model_file"])
-    with st.spinner("Running model inference..."):
-        try:
-            probs = model_predict_proba(artifacts["model_file"], X_in)
-        except Exception as e:
-            st.error("Model inference failed: " + str(e))
-            st.stop()
-
-    # determine class labels
-    try:
-        classes = list(artifacts["le"].classes_) if artifacts.get("le") is not None else None
+        return list(le.classes_) if le is not None else None
     except Exception:
-        classes = None
+        return None
 
-    if classes is None:
-        # try to infer labels from model outputs (if one-hot turned into label indices)
-        # create default class names 0..n-1
-        n_classes = probs.shape[1]
-        classes = [str(i) for i in range(n_classes)]
 
-    # probs -> dataframe
-    prob_df = pd.DataFrame(probs, columns=[f"p_{c}" for c in classes])
-    pred_idx = np.argmax(probs, axis=1)
-    pred_labels = [classes[i] for i in pred_idx]
-
-    out_df = df.reset_index(drop=True).copy()
-    out_df["pred_label_multiclass"] = pred_labels
-    out_df = pd.concat([out_df, prob_df.reset_index(drop=True)], axis=1)
-
-    # determine normal_label
+def determine_normal_label(classes, probs=None):
+    """Identify the 'normal' class among labels, matching Streamlit logic."""
     normal_candidates = {"normal", "Normal", "NORMAL", "benign", "BENIGN", "Benign", "Normal Traffic"}
-    normal_label = None
     for c in classes:
         if c in normal_candidates:
-            normal_label = c
-            break
-    if normal_label is None:
+            return c
+    # fallback: class with highest average probability
+    if probs is not None:
         avg_probs = probs.mean(axis=0)
-        normal_label = classes[int(np.argmax(avg_probs))]
-
-    out_df["p_attack"] = 1.0 - out_df[f"p_{normal_label}"]
-    out_df["pred_label_binary"] = np.where(out_df["p_attack"] >= threshold, "attack", "normal")
-
-    st.success("Prediction completed.")
-    st.markdown(f"**Detected normal label:** `{normal_label}`")
-    st.subheader("Sample predictions")
-    st.dataframe(out_df.head(10))
-    st.download_button("Download predictions CSV", data=out_df.to_csv(index=False).encode("utf-8"), file_name="predictions.csv", mime="text/csv")
-
-    # quick eval if ground truth present
-    true_col = None
-    for c in ["label","Label","label_true","ground_truth"]:
-        if c in df.columns:
-            true_col = c
-            break
-    if true_col:
-        from sklearn.metrics import accuracy_score, classification_report
-        try:
-            acc = accuracy_score(df[true_col].values, out_df["pred_label_multiclass"].values)
-            st.write("Multiclass accuracy on uploaded file:", float(acc))
-            st.text(classification_report(df[true_col].values, out_df["pred_label_multiclass"].values, zero_division=0))
-        except Exception:
-            pass
-
-st.markdown("---")
-st.caption("app_models/ auto-match: prefers feature_meta name matches then scaler feature count.")
+        return classes[int(np.argmax(avg_probs))]
+    return classes[0]

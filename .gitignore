@@ -30,18 +30,15 @@ data/*.txt
 # ---------------------------
 # MODEL CHECKPOINTS / TRAINING OUTPUTS
 # ---------------------------
-app_models/
 results/
 checkpoints/
 models/
 runs/
 outputs/
-*.h5
 *.hdf5
 *.ckpt
 *.pt
 *.pth
-*.pkl
 
 # ---------------------------
 # LOGS / TEMP

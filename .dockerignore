@@ -1,0 +1,35 @@
+# === Inference-only Docker image ===
+# Excludes training data, results, virtualenv, and git history.
+
+# Datasets (not needed for inference)
+data/
+UNSW_NB15_testing-set_processed.csv
+
+# Training results (not needed for inference)
+results/
+
+# Local virtualenv
+idsenv310/
+
+# Git
+.git/
+.gitignore
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.tmp
+.agents/
