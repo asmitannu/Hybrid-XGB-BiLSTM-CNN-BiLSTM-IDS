@@ -1,300 +1,89 @@
-# Hybrid Real-Time Intrusion Detection Service
+# Hybrid XGB-LSTM and CNN-LSTM IDS
 
-**Python · TensorFlow · XGBoost · FastAPI · Docker · AWS EC2**
+## 1. PROJECT
+This project implements a hybrid machine-learning and deep-learning Intrusion Detection System (IDS). It utilizes two separate pipelines for network traffic classification:
+- **CNN → BiLSTM**
+- **XGBoost feature selection → BiLSTM**
 
-## Overview
+## 2. WHY IDS
+Intrusion Detection Systems are critical components of network security. They monitor network traffic for suspicious activity and known threats, alerting administrators to potential attacks such as DDoS, port scanning, and brute force attempts. A robust ML/DL-based IDS can learn complex patterns in network data to accurately identify both known and zero-day intrusions while minimizing false alarms.
 
-This project implements a hybrid intrusion detection system using dual deep-learning pipelines aligned to research methodology:
+## 3. DATASETS
+The models are trained and evaluated on four distinct benchmark datasets:
+- **CICIDS2017**: Represents modern network traffic with up-to-date attacks (like DDoS, Brute Force, Web Attacks) alongside normal benign background traffic. Used for multiclass classification.
+- **UNSW-NB15**: Contains a comprehensive mix of normal activities and synthetic contemporary attack behaviors. Used for multiclass classification.
+- **NSL-KDD**: A refined version of the classic KDD'99 dataset, solving its inherent redundancy issues. Represents fundamental network intrusions (DoS, Probe, R2L, U2R). Used for multiclass classification.
+- **WSN-DS**: A specialized Wireless Sensor Network dataset containing normal routing data and various denial-of-service attacks (Blackhole, Grayhole, Flooding, Scheduling). Used for multiclass classification.
 
-| Pipeline | Architecture |
-|----------|-------------|
-| **CNN → BiLSTM** | Conv1D feature extraction → Bidirectional LSTM for temporal pattern capture |
-| **XGBoost → BiLSTM** | XGBoost-based feature selection (top-k) → Bidirectional LSTM classification |
+## 4. METHODOLOGY
+The overall workflow of the project follows this pipeline:
 
-Trained and evaluated across four benchmark datasets:
-
-- **CICIDS 2017**
-- **UNSW-NB15**
-- **NSL-KDD**
-- **WSN-DS**
-
-Achieving up to **98–99% accuracy** with false alarm rates below 1% on structured datasets.
-
-## Project Structure
-
-```
-├── apps/
-│   ├── inference.py       # Shared inference pipeline (model loading, preprocessing, prediction)
-│   └── fastapi_app.py     # FastAPI REST endpoints (single + batch prediction)
-├── app_models/            # Trained model artifacts (per-dataset, per-pipeline)
-│   ├── CICIDS/            # CICIDS_CNN, CICIDS_XGB
-│   ├── NSL-KDD/           # NSL-KDD_CNN, NSL-KDD_XGB
-│   ├── UNSW/              # UNSW_CNN, UNSW_XGB
-│   ├── UNSW_CNN/          # Standalone UNSW CNN variant
-│   └── WSN-DS/            # WSN-DS_CNN, WSN-DS_XGB
-├── src/                   # ML training, preprocessing, evaluation (frozen)
-├── data/                  # Datasets (not included in Docker image)
-├── results/               # Evaluation results (not included in Docker image)
-├── Dockerfile             # Inference-only container
-├── .dockerignore
-├── requirements.txt
-└── README.md
-```
-
-## Architecture
-
-```
-Client (curl / Python / any HTTP client)
-        │
-        ▼
-   FastAPI REST API  (port 8000)
-        │
-        ▼
-   Inference Pipeline
-   (apps/inference.py)
-        │
-        ├── Model discovery & auto-selection
-        ├── Feature ordering & preprocessing (scaler)
-        ├── Feature selection (XGB pipeline only)
-        └── Keras model prediction (.h5)
-        │
-        ▼
-   JSON response
+```text
+Raw dataset
+    ↓
+Cleaning / preprocessing
+    ↓
+Encoding
+    ↓
+Train/Test split
+    ↓
+Scaling
+    ↓
+        ┌──────────────────┐
+        │                  │
+        ▼                  ▼
+   CNN pipeline       XGBoost pipeline
+        │                  │
+   CNN feature       Feature selection
+   extraction             │
+        │                  ▼
+        │               BiLSTM
+        ▼                  │
+      BiLSTM               │
+        │                  │
+        └────────┬─────────┘
+                 ↓
+             Prediction
 ```
 
----
+## 5. TWO ARCHITECTURES
 
-## FastAPI Endpoints
+### CNN → BiLSTM
+In this architecture, a 1D Convolutional Neural Network (CNN) is first used to automatically extract spatial and structural features from the raw network flow data. The extracted features are then fed into a Bidirectional Long Short-Term Memory (BiLSTM) network, which captures the temporal dependencies and sequential patterns of the traffic before making the final classification.
 
-### `GET /` — Health Check
+### XGBoost feature selection → BiLSTM
+In this architecture, XGBoost is utilized purely for feature selection to identify the most important predictive features from the network traffic. Once the top features are selected, they are passed into the Bidirectional LSTM (BiLSTM) network for sequence learning and classification.
 
-Returns service status and list of loaded model variants.
+## 6. DATASET-SPECIFIC PREPROCESSING
+To prepare the network traffic for training, various preprocessing techniques are applied where applicable:
+- **StandardScaler**: Scaling numeric features to have zero mean and unit variance.
+- **Label encoding**: Converting categorical targets (attack types) into numeric labels.
+- **Stratified split**: Ensuring balanced class representation in the train and test sets.
+- **SMOTE**: Addressing class imbalance by synthetically oversampling minority attack classes.
+- **Top-k XGBoost feature selection**: Selecting the most impactful features for the XGBoost→BiLSTM pipeline.
 
-### `GET /models` — List Available Models
+## 7. INFERENCE SYSTEM
+The project exposes its predictive capabilities through a FastAPI REST inference layer.
 
-Returns metadata for each discovered model variant.
+`apps/inference.py` handles the core inference logic, including:
+- model discovery
+- preprocessing
+- artifact loading
+- prediction
 
-### `POST /predict` — Single-Flow Prediction
+`apps/fastapi_app.py` provides the REST API layer that receives HTTP requests, routes them to the inference engine, and returns predictions.
 
-Predict the class of **one** network flow.
+## 8. API
+The FastAPI service exposes the following endpoints:
+- **`GET /`**: Health check endpoint returning service status.
+- **`GET /models`**: Lists metadata for all available model variants.
+- **`POST /predict`**: Predicts the class for a single network flow.
+- **`POST /predict/batch`**: Predicts the classes for multiple network flows.
 
-**Request body:**
+FastAPI Swagger/OpenAPI documentation is available at `/docs` when the API is running.
 
-```json
-{
-  "model_name": "CICIDS_CNN",
-  "features": {
-    "Flow Duration": 123456,
-    "Total Fwd Packets": 5,
-    "Total Backward Packets": 3
-  },
-  "threshold": 0.5
-}
-```
+## 9. DOCKER
+The inference service can be containerized and run using Docker. A `Dockerfile` is provided to build an image containing the FastAPI app and inference dependencies.
 
-- `model_name` — *(optional)* Specific model variant. If omitted, auto-selects based on feature names.
-- `features` — Dict of feature-name → numeric value.
-- `threshold` — *(optional, default 0.5)* Binary attack threshold.
-
-**Response:**
-
-```json
-{
-  "model_used": "CICIDS_CNN",
-  "prediction": {
-    "predicted_label": "Normal Traffic",
-    "binary_label": "normal",
-    "class_probabilities": {
-      "Bots": 0.001,
-      "Brute Force": 0.002,
-      "DDoS": 0.003,
-      "DoS": 0.004,
-      "Normal Traffic": 0.985,
-      "Port Scanning": 0.003,
-      "Web Attacks": 0.002
-    },
-    "preprocessing_messages": []
-  }
-}
-```
-
-### `POST /predict/batch` — Batch Prediction
-
-Predict classes for **multiple** network flows. Output order matches input order.
-
-**Request body:**
-
-```json
-{
-  "model_name": "CICIDS_CNN",
-  "samples": [
-    {"Flow Duration": 123, "Total Fwd Packets": 5, "Total Backward Packets": 3},
-    {"Flow Duration": 456, "Total Fwd Packets": 100, "Total Backward Packets": 80}
-  ],
-  "threshold": 0.5
-}
-```
-
-**Response:**
-
-```json
-{
-  "model_used": "CICIDS_CNN",
-  "predictions": [
-    {
-      "predicted_label": "Normal Traffic",
-      "binary_label": "normal",
-      "class_probabilities": {"...": "..."},
-      "preprocessing_messages": []
-    },
-    {
-      "predicted_label": "DDoS",
-      "binary_label": "attack",
-      "class_probabilities": {"...": "..."},
-      "preprocessing_messages": []
-    }
-  ]
-}
-```
-
----
-
-## Running Locally (without Docker)
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the API server
-uvicorn apps.fastapi_app:app --host 0.0.0.0 --port 8000
-
-# Open interactive docs
-# http://localhost:8000/docs
-```
-
----
-
-## Docker
-
-### Build
-
-```bash
-docker build -t ids-service .
-```
-
-### Run
-
-```bash
-docker run -d -p 8000:8000 --name ids-api ids-service
-```
-
-### Test
-
-```bash
-# Health check
-curl http://localhost:8000/
-
-# List models
-curl http://localhost:8000/models
-
-# Single prediction (example)
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"model_name": "CICIDS_CNN", "features": {"Flow Duration": 100, "Total Fwd Packets": 5}}'
-
-# Batch prediction
-curl -X POST http://localhost:8000/predict/batch \
-  -H "Content-Type: application/json" \
-  -d '{"model_name": "CICIDS_CNN", "samples": [{"Flow Duration": 100}, {"Flow Duration": 200}]}'
-```
-
----
-
-## AWS EC2 Deployment
-
-### Step 1 — Launch EC2 Instance
-
-- AMI: Amazon Linux 2023 or Ubuntu 22.04
-- Instance type: `t3.medium` or larger (TensorFlow needs ≥ 4 GB RAM)
-- Storage: ≥ 20 GB
-
-### Step 2 — Install Docker on EC2
-
-**Amazon Linux 2023:**
-
-```bash
-sudo yum update -y
-sudo yum install -y docker
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker $USER
-# Log out and back in for group change to take effect
-```
-
-**Ubuntu 22.04:**
-
-```bash
-sudo apt-get update
-sudo apt-get install -y docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker $USER
-# Log out and back in for group change to take effect
-```
-
-### Step 3 — Upload the Project
-
-```bash
-# Option A: Clone from git (if pushed)
-git clone <your-repo-url> && cd IDS_PROJECT
-
-# Option B: Upload via SCP
-scp -i your-key.pem -r ./IDS_PROJECT ec2-user@<EC2-PUBLIC-IP>:~/
-ssh -i your-key.pem ec2-user@<EC2-PUBLIC-IP>
-cd IDS_PROJECT
-```
-
-> **Note:** The `app_models/` directory (trained model artifacts) is gitignored.
-> If cloning, you must also upload `app_models/` separately via SCP:
-> ```bash
-> scp -i your-key.pem -r ./app_models ec2-user@<EC2-PUBLIC-IP>:~/IDS_PROJECT/
-> ```
-
-### Step 4 — Build & Run
-
-```bash
-docker build -t ids-service .
-docker run -d -p 8000:8000 --name ids-api ids-service
-```
-
-### Step 5 — Configure Security Group
-
-In the AWS Console → EC2 → Security Groups:
-
-- Add an **Inbound Rule**:
-  - Type: Custom TCP
-  - Port: **8000**
-  - Source: Your IP (or `0.0.0.0/0` for public access)
-
-### Step 6 — Access the Service
-
-```bash
-# Replace <EC2-PUBLIC-IP> with your instance's public IP
-curl http://<EC2-PUBLIC-IP>:8000/
-
-# Interactive API docs
-# http://<EC2-PUBLIC-IP>:8000/docs
-```
-
----
-
-## ML Pipeline Details (Frozen)
-
-The ML training/evaluation pipeline in `src/` is complete and unchanged:
-
-- `src/train.py` — Training script supporting both CNN and XGB pipelines
-- `src/preprocess.py` — Dataset preprocessing (CICIDS, UNSW, NSL-KDD, WSN-DS)
-- `src/cnn_bilstm_model.py` — CNN → BiLSTM architecture
-- `src/bilstm_model.py` — BiLSTM architecture (used by XGBoost pipeline)
-- `src/xgboost_features.py` — XGBoost-based feature selection
-- `src/evaluate.py` — Evaluation and metrics generation
+## 10. DEPLOYMENT
+The FastAPI inference service is containerized using Docker and can be deployed to AWS EC2.
