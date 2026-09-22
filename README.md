@@ -15,7 +15,65 @@ The models are trained and evaluated on four distinct benchmark datasets:
 - **NSL-KDD**: A refined version of the classic KDD'99 dataset, solving its inherent redundancy issues. Represents fundamental network intrusions (DoS, Probe, R2L, U2R). Used for multiclass classification.
 - **WSN-DS**: A specialized Wireless Sensor Network dataset containing normal routing data and various denial-of-service attacks (Blackhole, Grayhole, Flooding, Scheduling). Used for multiclass classification.
 
-## 4. METHODOLOGY
+## 4. GETTING STARTED
+
+### Prerequisites
+- Python 3.10+
+- Dependencies installed from `requirements.txt`
+
+### Step 1 — Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### Step 2 — Start the API Server
+```bash
+uvicorn apps.fastapi_app:app --host 0.0.0.0 --port 8000
+```
+
+### Step 3 — Open Swagger / OpenAPI Documentation
+Once the server is running, open your browser and navigate to:
+```
+http://localhost:8000/docs
+```
+The Swagger UI lists all available endpoints and allows you to send test requests interactively directly from the browser.
+
+### Step 4 — Verify the API is Running
+```bash
+curl http://localhost:8000/
+```
+You should see a JSON response with `"status": "ok"` and the list of loaded model variants.
+
+### Step 5 — View Available Models
+```bash
+curl http://localhost:8000/models
+```
+This returns metadata for all model variants discovered from `app_models/`.
+
+### Step 6 — Evaluate a Saved Model (Metrics)
+To generate evaluation metrics (accuracy, precision, recall, F1, confusion matrix) for a saved model without retraining, use the evaluation script:
+```bash
+python scripts/evaluate_saved_model.py \
+  --model  app_models/CICIDS/CICIDS_CNN/best_model.h5 \
+  --dataset cicids \
+  --scaler  app_models/CICIDS/CICIDS_CNN/scaler.pkl \
+  --le      app_models/CICIDS/CICIDS_CNN/label_encoder.pkl \
+  --out_dir results/cicids_cnn_eval
+```
+Results — including a confusion matrix heatmap and a full metrics report — are saved to the specified `--out_dir`. Change `--model`, `--dataset`, `--scaler`, and `--le` to evaluate a different dataset or pipeline variant. For the XGBoost pipeline, also pass `--feature_meta`:
+```bash
+python scripts/evaluate_saved_model.py \
+  --model        app_models/CICIDS/CICIDS_XGB/best_model.h5 \
+  --dataset      cicids \
+  --scaler       app_models/CICIDS/CICIDS_XGB/scaler.pkl \
+  --le           app_models/CICIDS/CICIDS_XGB/label_encoder.pkl \
+  --feature_meta app_models/CICIDS/CICIDS_XGB/feature_meta.pkl \
+  --out_dir      results/cicids_xgb_eval
+```
+
+---
+
+## 5. METHODOLOGY
 The overall workflow of the project follows this pipeline:
 
 ```text
