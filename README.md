@@ -82,6 +82,103 @@ The FastAPI service exposes the following endpoints:
 
 FastAPI Swagger/OpenAPI documentation is available at `/docs` when the API is running.
 
+### API Usage Samples
+
+**1. Single Prediction - Normal Traffic**
+```json
+// POST /predict
+{
+  "model_name": "CICIDS_CNN",
+  "features": { "Flow Duration": 120, "Total Fwd Packets": 2 }
+}
+
+// Response
+{
+  "model_used": "CICIDS_CNN",
+  "prediction": {
+    "predicted_label": "Normal Traffic",
+    "binary_label": "normal",
+    "class_probabilities": { "Normal Traffic": 0.98, "DDoS": 0.01 }
+  }
+}
+```
+
+**2. Single Prediction - Attack Traffic**
+```json
+// POST /predict
+{
+  "model_name": "CICIDS_CNN",
+  "features": { "Flow Duration": 45000, "Total Fwd Packets": 100 }
+}
+
+// Response
+{
+  "model_used": "CICIDS_CNN",
+  "prediction": {
+    "predicted_label": "DDoS",
+    "binary_label": "attack",
+    "class_probabilities": { "Normal Traffic": 0.02, "DDoS": 0.97 }
+  }
+}
+```
+
+**3. Batch Prediction - Normal Traffic**
+```json
+// POST /predict/batch
+{
+  "model_name": "CICIDS_CNN",
+  "samples": [
+    { "Flow Duration": 120, "Total Fwd Packets": 2 },
+    { "Flow Duration": 130, "Total Fwd Packets": 3 }
+  ]
+}
+
+// Response
+{
+  "model_used": "CICIDS_CNN",
+  "predictions": [
+    {
+      "predicted_label": "Normal Traffic",
+      "binary_label": "normal",
+      "class_probabilities": { "Normal Traffic": 0.98, "DDoS": 0.01 }
+    },
+    {
+      "predicted_label": "Normal Traffic",
+      "binary_label": "normal",
+      "class_probabilities": { "Normal Traffic": 0.96, "DDoS": 0.01 }
+    }
+  ]
+}
+```
+
+**4. Batch Prediction - Attack Traffic**
+```json
+// POST /predict/batch
+{
+  "model_name": "CICIDS_CNN",
+  "samples": [
+    { "Flow Duration": 45000, "Total Fwd Packets": 100 },
+    { "Flow Duration": 50000, "Total Fwd Packets": 120 }
+  ]
+}
+
+// Response
+{
+  "model_used": "CICIDS_CNN",
+  "predictions": [
+    {
+      "predicted_label": "DDoS",
+      "binary_label": "attack",
+      "class_probabilities": { "Normal Traffic": 0.02, "DDoS": 0.97 }
+    },
+    {
+      "predicted_label": "DDoS",
+      "binary_label": "attack",
+      "class_probabilities": { "Normal Traffic": 0.01, "DDoS": 0.98 }
+    }
+  ]
+}
+```
 ## 9. DOCKER
 The inference service can be containerized and run using Docker. A `Dockerfile` is provided to build an image containing the FastAPI app and inference dependencies.
 
