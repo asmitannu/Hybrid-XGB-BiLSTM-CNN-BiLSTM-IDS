@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 ### Step 2 — Start the API Server
 ```bash
-uvicorn apps.fastapi_app:app --host 0.0.0.0 --port 8000
+uvicorn apps.fastapi_app:app 
 ```
 
 ### Step 3 — Open Swagger / OpenAPI Documentation
