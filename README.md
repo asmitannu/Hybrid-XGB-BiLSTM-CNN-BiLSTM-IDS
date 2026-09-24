@@ -76,17 +76,17 @@ python scripts/evaluate_saved_model.py \
 ## 5. METHODOLOGY
 The overall workflow of the project follows this pipeline:
 
-```text
-Raw dataset
-    ↓
-Cleaning / preprocessing
-    ↓
-Encoding
-    ↓
-Train/Test split
-    ↓
-Scaling
-    ↓
+            ```text
+            Raw dataset
+                ↓
+            Cleaning / preprocessing
+                ↓
+            Encoding
+                ↓
+            Train/Test split
+                ↓
+            Scaling
+                ↓
         ┌──────────────────┐
         │                  │
         ▼                  ▼
